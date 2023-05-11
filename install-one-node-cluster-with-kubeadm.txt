@@ -1,0 +1,130 @@
+#  swapoff -a
+#  nano /etc/fstab
+#  modprobe overlay
+#  modprobe br_netfilter
+#  nano /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+#  nano /etc/sysctl.conf
+net.bridge.bridge-nf-call-iptables=1
+net.ipv4.ip_forward=1
+#  sysctl -p
+#  export OS=xUbuntu_22.04
+#  export VERSION=1.24
+#  echo "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+#  curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | sudo apt-key add -
+#  echo "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.list
+#  curl -L https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/$OS/Release.key | sudo apt-key add -
+#  apt update
+
+
+#  timedatectl set-timezone "Asia/Tehran"
+#  apt install ca-certificates
+ 
+#  apt update
+#  apt install cri-o cri-o-runc cri-tools -y
+#  systemctl enable crio.service
+#  systemctl enable crio.service
+#  systemctl status crio.service
+*************************************** install kubeadm kubectl kubelet *******************
+*** download offline kubectl
+curl -LO https://dl.k8s.io/release/v1.27.1/bin/linux/amd64/kubectl
+install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+kubectl version --client
+
+export DOWNLOAD_DIR="/usr/local/bin"
+cd $DOWNLOAD_DIR
+export ARCH="amd64"
+export RELEASE=v1.27.1 or "$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+curl -L --remote-name-all https://dl.k8s.io/release/${RELEASE}/bin/linux/${ARCH}/{kubeadm,kubelet}
+chmod +x {kubeadm,kubelet}
+
+# nano /etc/systemd/system/kubelet.service
+[Unit]
+Description=kubelet: The Kubernetes Node Agent
+Documentation=https://kubernetes.io/docs/home/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/kubelet
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+# nano /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+# Note: This dropin only works with kubeadm and kubelet v1.11+
+[Service]
+Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+# This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+# This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+# the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+EnvironmentFile=-/etc/default/kubelet
+ExecStart=
+ExecStart=/usr/local/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+
+apt-get -y install socat
+apt-get -y install conntrack
+systemctl enable --now kubelet
+or 
+
+RELEASE_VERSION="v0.4.0"
+curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/kubepkg/templates/latest/deb/kubelet/lib/systemd/system/kubelet.service" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /etc/systemd/system/kubelet.service
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/kubepkg/templates/latest/deb/kubeadm/10-kubeadm.conf" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+
+systemctl enable --now kubelet
+***
+#  crictl info
+#  curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+#  echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+#   (if no_pubkey ) run apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B53DC80D13EDEF05
+#  apt-get update
+#  apt-get install -y kubelet kubeadm kubectl
+#  apt-mark hold kubelet kubeadm kubectl
+#  kubeadm init --pod-network-cidr=10.244.0.0/16
+
+kubeadm join 192.168.5.175:6443 --token oy0792.0907qrgxovwcr2ms --discovery-token-ca-cert-hash sha256:0c16eca0de0dae9ffb646f5bc93bd172fd863842c47c21e51b1889166d398dd6
+
+
+if kubeadm join error run this on master and use command output: kubeadm token create --print-join-command
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+**** optional 
+kubeadm token create --print-join-command
+(metric server)
+kubectl top nodes
+kubectl apply -f https://raw.githubusercontent.com/techiescamp/kubeadm-scripts/main/manifests/metrics-server.yaml
+****
+#  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+#  kubectl taint nodes --all node-role.kubernetes.io/master-
+#  kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+#  systemctl restart cri-o.service
+
+
+#  kubectl get pods -n kube-system
+#  kubectl get nodes -o wide
+#  kubectl apply -f https://k8s.io/examples/pods/commands.yaml
+#  kubectl get pods
+t-shoot:
+--------
+#kubectl describe node <nodename> | grep Taints
+
+#kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
+#kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+
